@@ -4,13 +4,19 @@ import os
 import uuid
 import pydicom
 import nibabel as nib
+import numpy as np
+from tqdm import tqdm
+import open3d as o3d
+
 path = "Data/sample_CT_dicom"
 
 
 def DcmVisualization(path):
     # 读取DICOM图像
     image = sitk.ReadImage(path)
-
+    print(image.GetSize())
+    print(image.GetMetaData('Series'))
+    # image = sitk.SmoothingRecursiveGaussian(image, 0.1)
     # 将图像转换为NumPy数组
     array = sitk.GetArrayFromImage(image)
 
@@ -28,16 +34,15 @@ def DcmToNii(path):
     sitk.WriteImage(image, path + "sample_CT.nii.gz")
 
 
-def NiiVisualization(path):
+def NiiVisualization(path,x=20,y=50,z=23):
     # 指定 NIfTI 文件路径
-    nii_file = "Data/STS_01/STS_01_ct.nii.gz"
     # 使用 SimpleITK 库读取 NIfTI 文件
-    image = sitk.ReadImage(nii_file)
+    image = sitk.ReadImage(path)
     print(image.GetSize())
     # 将 SimpleITK 图像转换为 NumPy 数组
     image_array = sitk.GetArrayFromImage(image)
     # 显示 NIfTI 图像
-    postition = [20, 50, 23]
+    postition = [x,y,z]
     fig, axs = plt.subplots(1, 3)
     axs[0].imshow(image_array[postition[0], :, :], cmap="gray")
     axs[0].axis("off")
@@ -48,31 +53,43 @@ def NiiVisualization(path):
     plt.show()
 
 
-def nii_to_dcm(nii_path, output_dir):
+def nii_to_dcm(nii_path, outPath):
     # 加载NIfTI图像
+    os.makedirs(outPath, exist_ok=True)
     nii_image = sitk.ReadImage(nii_path)
+    size = nii_image.GetSize()
+    origin = nii_image.GetOrigin()
+    spacing = nii_image.GetSpacing()
+    direction = np.array(nii_image.GetDirection()).reshape(3, 3)
+    image = sitk.GetArrayFromImage(nii_image)
+    min_value = np.min(image)
+    max_value = np.max(image)
+    image = (image - min_value) / (max_value - min_value)#归一化
+    for z in range(size[2]):
+        image_slice = image[:,:,z] # 获取切片
+        # 将图像切片转换为整数类型避免类型错误
+        image_slice_int = (image_slice * np.iinfo(np.int16).max).astype(np.int16)
+        
+        dcm_image = sitk.GetImageFromArray(image_slice_int)
+        # 设置DICOM文件的元数据
+        dcm_image.SetSpacing(spacing)
+        # 使用前两行作为方向矩阵
+        dcm_direction = direction[0:2, 0:2].flatten()
+        dcm_image.SetDirection(dcm_direction)
+        dcm_image.SetMetaData("0000|0008", '123')  # Series Instance UID
+        dcm_image.SetMetaData("0020|000d", 'study_instance_uid')   # Study Instance UID
+        dcm_image.SetMetaData("0008|103e", 'series_Description')    # Series Description
+        # Set Modality
+        dcm_image.SetMetaData("0008|0060", 'modality')
+        # 构造DICOM文件路径并保存
+        dcm_path = os.path.join(outPath, f"slice_{z:03d}.dcm")
+        sitk.WriteImage(dcm_image, dcm_path)
 
-    # 创建一个SimpleITK的ImageIO对象，指定为DICOM格式
-    dicom_io = sitk.ImageIOFactory.CreateImageIO("DICOM")
-    
-    # 设置输出路径
-    output_series_uid = str(uuid.uuid4())
-    output_dicom_path = os.path.join(output_dir, output_series_uid)
-    
-    # 将NIfTI图像的空间信息应用于DICOM图像
-    dicom_image = sitk.Cast(sitk.RescaleIntensity(nii_image), sitk.sitkInt16)
-    dicom_image.SetDirection(nii_image.GetDirection())
-    dicom_image.SetOrigin(nii_image.GetOrigin())
-    dicom_image.SetSpacing(nii_image.GetSpacing())
-    
-    # 将DICOM图像信息写入ImageIO
-    dicom_io.SetMetaDataDictionary(dicom_image.GetMetaDataKeys())
-    dicom_io.SetMetaData(dicom_image.GetMetaData())
-    
-    # 保存DICOM图像
-    dicom_io.WriteImage(dicom_image, output_dicom_path)
+def qiege(path):
+    image = sitk.GetArrayFromImage(sitk.ReadImage(path))
+    image = image[0:100,0:100,0:100]
+    plt.imshow(image)
+    plt.show
 
-nii_path = 'Data/STS_01/STS_01_ct.nii.gz'  # 替换为你的NIfTI图像文件路径
-output_dir = 'Data/sample_NiiToDCM'  # 替换为你想保存DICOM文件的目录路径
-os.makedirs(output_dir, exist_ok=True)
-nii_to_dcm(nii_path, output_dir)
+nii_to_dcm("Data/STS_01/STS_01_ct_gtvt.nii.gz",'Data/STS_01/STS_01_ct_gtvt/')
+# DcmVisualization('Data/sample_CT_dicom/1-002.dcm')
