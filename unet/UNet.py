@@ -17,6 +17,7 @@ class Data(Dataset):
         transform = transforms.Compose(
             [transforms.Resize((388, 388)), transforms.ToTensor()]
         )
+        rotate = transforms.RandomRotation(90)
         self.x = []
         self.y = []
 
@@ -29,11 +30,12 @@ class Data(Dataset):
             if os.path.isfile(file_path) and filename.lower().endswith((".png")):
                 image = Image.open(file_path)
                 image = transform(image)
-
+                
                 # Apply mirror padding
                 image = mirror_pad(image, pad_size)
-
+                image2 = rotate(image)
                 self.x.append(image)
+                self.x.append(image2)
 
         for filename in os.listdir("unet/Data/membrane/train/label"):
             file_path = os.path.join("unet/Data/membrane/train/label", filename)
@@ -41,7 +43,9 @@ class Data(Dataset):
             if os.path.isfile(file_path) and filename.lower().endswith((".png")):
                 image = Image.open(file_path)
                 image = transform(image)
+                image2 = rotate(image)
                 self.y.append(image)
+                self.y.append(image2)
 
     def __getitem__(self, index):
         return self.x[index], self.y[index]
@@ -121,7 +125,6 @@ class UNet(nn.Module):
         pre3, x = self.down3(x)
         pre4, x = self.down4(x)
         x = self.center(x)
-        print(x.size())
         x = self.up1(x, pre4)
         x = self.up2(x, pre3)
         x = self.up3(x, pre2)
@@ -142,8 +145,6 @@ def train(net, data_loader, loss_fn, optimizer, num_epochs, device):
             optimizer.zero_grad()  # 梯度清零
             # 前向传播
             outputs = net(inputs)
-            # targets = targets[:,0,:,:]
-            # outputs = outputs[:, 0, :, :]
             # 计算损失
             loss = loss_fn(outputs, targets)
             # 反向传播
@@ -166,9 +167,9 @@ device = torch.device(
     if torch.backends.mps.is_available
     else "cpu"
 )
-device = torch.device("cpu")
+# device = torch.device("cpu")
 Data = Data()
-Data = DataLoader(Data, batch_size=2, shuffle=True)
+Data = DataLoader(Data, batch_size=4, shuffle=True)
 Net = UNet().to(device)
 optimizer = torch.optim.Adam(Net.parameters(), lr=0.001)
 loss_fn = nn.CrossEntropyLoss()
