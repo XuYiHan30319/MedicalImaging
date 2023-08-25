@@ -173,7 +173,7 @@ image = Data[0][0]
 Data = DataLoader(Data, batch_size=4, shuffle=True)
 Net = UNet().to(device)
 if os.path.exists("1.pth"):
-    Net._load_from_state_dict("1.pth")
+    Net._load_from_state_dict("1.pth")  
     out = Net(image.unsqueeze(0).to(device))
     out_np = out.squeeze().cpu().detach().numpy()
     # 将 NumPy 数组转换为 PIL 图像

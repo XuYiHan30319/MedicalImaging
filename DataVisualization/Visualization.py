@@ -5,21 +5,28 @@ import numpy as np
 from tqdm import tqdm
 import nibabel as nib
 import pydicom
+from PIL import Image
 path = "Data/sample_CT_dicom"
 
 
 def DcmVisualization(path):
-    # 读取DICOM图像
+   # 读取单张DICOM图像
     image = sitk.ReadImage(path)
-    print(image.GetSize())
-    print(image.GetMetaData("Series"))
-    # image = sitk.SmoothingRecursiveGaussian(image, 0.1)
-    # 将图像转换为NumPy数组
-    array = sitk.GetArrayFromImage(image)
 
+    # 将图像转换为NumPy数组
+    array = sitk.GetArrayFromImage(image).reshape(512, 512)
     # 可视化图像
-    plt.imshow(array[0], cmap="gray")  # 假设读取的DICOM包含多个切片，这里选择第一个切片进行可视化
-    plt.show()
+    fig, ax = plt.subplots(figsize=(5, 5), dpi=100)
+    ax.imshow(array, cmap='gray')
+    ax.axis('off')
+    plt.savefig('gray_image.png')
+    image = Image.open('gray_image.png')
+
+    # 转换为灰度图像
+    gray_image = image.convert('L')
+
+    # 保存为灰度图像
+    gray_image.save('gray_image.png')
 
 
 def DcmToNii(path):
@@ -66,7 +73,7 @@ def nii_to_dcm(nii_path, outPath):
         image_slice = image[:, :, z]  # 获取切片
         # 将图像切片转换为整数类型避免类型错误
         image_slice_int = (image_slice * np.iinfo(np.int16).max).astype(np.int16)
-       # 创建一个空的DICOM对象
+        # 创建一个空的DICOM对象
         dcm = pydicom.Dataset()
         # 设置DICOM的相关属性
         dcm.Rows = image_slice_int.shape[0]
@@ -79,7 +86,7 @@ def nii_to_dcm(nii_path, outPath):
         dcm.SeriesNumber = 1
         dcm.SeriesInstanceUID = "Your Series Instance UID"
         # 设置文件路径和名称
-        save_path = outPath+str(z)+".dcm"
+        save_path = outPath + str(z) + ".dcm"
         # 保存DICOM文件
         pydicom.filewriter.dcmwrite(save_path, dcm)
 
@@ -98,17 +105,19 @@ def gauss(path):
     plt.imshow(image[0])
     plt.show()
 
+
 def medianFiltering(path):
     image = sitk.ReadImage(path)
     median_filter = sitk.MedianImageFilter()
-    median_filter.SetRadius([3,3,3])
+    median_filter.SetRadius([3, 3, 3])
     median_filtered_image = median_filter.Execute(image)
     image = sitk.GetArrayFromImage(median_filtered_image)
     plt.imshow(image[0])
     plt.show()
 
-nii_to_dcm("Data/STS_01/STS_01_ct_gtvt.nii.gz",'Data/STS_01/STS_01_ct_gtvt/')
-# DcmVisualization('Data/STS_01/STS_01_ct_gtvt')
+
+# nii_to_dcm("Data/STS_01/STS_01_ct_gtvt.nxii.gz",'Data/STS_01/STS_01_ct_gtvt/')
+DcmVisualization("Data/sample_CT_dicom/1-011.dcm")
 # NiiVisualization('Data/STS_01/STS_01_ct.nii.gz',22,50,23)
 # qiege("Data/STS_01/STS_01_ct.nii.gz")
 # DcmToNii("Data/sample_CT_dicom/")
