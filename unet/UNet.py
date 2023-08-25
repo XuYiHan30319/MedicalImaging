@@ -30,7 +30,7 @@ class Data(Dataset):
             if os.path.isfile(file_path) and filename.lower().endswith((".png")):
                 image = Image.open(file_path)
                 image = transform(image)
-                
+
                 # Apply mirror padding
                 image = mirror_pad(image, pad_size)
                 image2 = rotate(image)
@@ -169,9 +169,19 @@ device = torch.device(
 )
 # device = torch.device("cpu")
 Data = Data()
+image = Data[0][0]
 Data = DataLoader(Data, batch_size=4, shuffle=True)
 Net = UNet().to(device)
-optimizer = torch.optim.Adam(Net.parameters(), lr=0.001)
-loss_fn = nn.CrossEntropyLoss()
-train(Net, Data, loss_fn, optimizer, 100, device)
-Net._save_to_state_dict("1.pth")
+if os.path.exists("1.pth"):
+    Net._load_from_state_dict("1.pth")
+    out = Net(image.unsqueeze(0).to(device))
+    out_np = out.squeeze().cpu().detach().numpy()
+    # 将 NumPy 数组转换为 PIL 图像
+    image = Image.fromarray(np.uint8(out_np))
+    # 保存图像
+    image.save("output_image.png")
+else:
+    optimizer = torch.optim.Adam(Net.parameters(), lr=0.001)
+    loss_fn = nn.CrossEntropyLoss()
+    train(Net, Data, loss_fn, optimizer, 100, device)
+    Net._save_to_state_dict("1.pth")
