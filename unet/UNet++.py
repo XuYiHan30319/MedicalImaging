@@ -144,7 +144,6 @@ class UNetPP(nn.Module):
 
 def train(net, data_loader, loss_fn, optimizer, num_epochs, device):
     print("Start Training...")
-    loss_fn = nn.BCEWithLogitsLoss()
     for epoch in range(num_epochs):
         net.train()  # 设置网络为训练模式
         total_loss = 0.0
@@ -163,10 +162,6 @@ def train(net, data_loader, loss_fn, optimizer, num_epochs, device):
             # 参数更新
             optimizer.step()
             total_loss += loss.item()
-            if (batch_idx + 1) % 10 == 0:
-                print(
-                    f"Epoch [{epoch+1}/{num_epochs}] Batch [{batch_idx+1}/{len(data_loader)}] Loss: {loss.item():.4f}"
-                )
         average_loss = total_loss / len(data_loader)
         print(f"Epoch [{epoch+1}/{num_epochs}] Average Loss: {average_loss:.4f}")
 
