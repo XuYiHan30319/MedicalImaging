@@ -69,7 +69,7 @@ class UnetBlock(nn.Module):
             nn.ReLU(),
         )
 
-    def forward(self, x):
+    def forward(self, x):   
         x = self.net(x)
         return x
 
