@@ -33,7 +33,6 @@ class ResNet(nn.Module):
         super().__init__(*args, **kwargs)
         
         
-        
     def forward(self, x):
         pass
 
