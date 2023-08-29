@@ -142,7 +142,7 @@ class TransUnet(nn.Module):
         self.down4 = UnetBlock(ch[2], ch[3])
         self.patchEmbedding = PatchEmbedding(64, 2, 256, embed_dim)
         self.Transform = nn.Sequential(
-            *[TransformerBlock(embed_dim, embed_dim*3, 8) for _ in range(3)]
+            *[TransformerBlock(embed_dim, embed_dim * 3, 8) for _ in range(3)]
         )
         self.conv1 = nn.Conv2d(embed_dim, 512, kernel_size=3, stride=1, padding=1)
 
