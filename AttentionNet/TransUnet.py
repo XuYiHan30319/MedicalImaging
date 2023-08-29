@@ -56,50 +56,6 @@ class Data(Dataset):
         return self.x.__len__()
 
 
-class DownBlock(nn.Module):
-    def __init__(self, inChannel, outChannel) -> None:
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Conv2d(inChannel, outChannel, 3, padding=0),
-            nn.BatchNorm2d(outChannel),
-            nn.ReLU(),
-            nn.Conv2d(outChannel, outChannel, 3, padding=0),
-            nn.BatchNorm2d(outChannel),
-            nn.ReLU(),
-        )
-        self.pool = nn.MaxPool2d(stride=2, kernel_size=2)
-
-    def forward(self, x):
-        x = self.net(x)
-        return x, self.pool(x)
-
-
-class UpBlock(nn.Module):
-    def __init__(self, inChannel, outChannel) -> None:
-        super().__init__()
-        self.ct = nn.ConvTranspose2d(inChannel, outChannel, 2, stride=2)
-
-        self.net = nn.Sequential(
-            nn.Conv2d(inChannel, outChannel, 3, padding=0),
-            nn.BatchNorm2d(outChannel),
-            nn.ReLU(),
-            nn.Conv2d(outChannel, outChannel, 3, padding=0),
-            nn.BatchNorm2d(outChannel),
-            nn.ReLU(),
-        )
-
-    def forward(self, x, pre):
-        x = self.ct(x)
-        # 裁剪
-        size = x.size()[2]
-        preSize = pre.size()[2]
-        start_row = (preSize - size) // 2
-        end_row = start_row + size
-        cropped_tensor = pre[:, :, start_row:end_row, start_row:end_row]
-        x = torch.cat([x, cropped_tensor], dim=1)
-        return self.net(x)
-
-
 class UnetBlock(nn.Module):
     def __init__(self, inChannel, outChannel) -> None:
         # 使用卷积核大小3，步长1，填充1，保持大小不变，从而让神经网络绝对对称,可以吧下降和上升写在一起
@@ -114,11 +70,6 @@ class UnetBlock(nn.Module):
     def forward(self, x):
         x = self.net(x)
         return x
-
-
-class AttentionBlock(nn.Module):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
 
 
 class TransformerBlock(nn.Module):
@@ -162,9 +113,6 @@ class PatchEmbedding(nn.Module):
         self.proj = nn.Conv2d(
             in_channel, self.embed_dim, kernel_size=patch_size, stride=patch_size
         )
-        self.positional_embedding = nn.Parameter(
-            torch.zeros(1, self.num_patches, self.embed_dim)
-        )
         # self.norm = nn.LayerNorm(embed_dim)
 
     def forward(self, x):
@@ -174,7 +122,6 @@ class PatchEmbedding(nn.Module):
         # 然后flatten变成 B,embed_dim,H/patch_size*W/patch_size
         # 然后transpose变成 B,H/patch_size*W/size,embed_dim得到想要的结果
         x = x.flatten(2).transpose(1, 2)
-        x += self.positional_embedding
         # x = self.norm(x)
         return x
 
@@ -195,7 +142,7 @@ class TransUnet(nn.Module):
         self.down4 = UnetBlock(ch[2], ch[3])
         self.patchEmbedding = PatchEmbedding(64, 2, 256, embed_dim)
         self.Transform = nn.Sequential(
-            *[TransformerBlock(embed_dim, embed_dim, 8) for _ in range(12)]
+            *[TransformerBlock(embed_dim, embed_dim*3, 8) for _ in range(3)]
         )
         self.conv1 = nn.Conv2d(embed_dim, 512, kernel_size=3, stride=1, padding=1)
 
@@ -271,6 +218,7 @@ if __name__ == "__main__":
         else "cpu"
     )
     model = TransUnet(1, 1).to(device)
+    print(model)
     data = Data()
     dataloader = DataLoader(data, batch_size=2, shuffle=True)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
