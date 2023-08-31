@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 import numpy as np
 import os
-from PIL import Image
+from PIL import Image, ImageOps
 
 
 def mirror_pad(image, pad_size):
@@ -13,41 +13,53 @@ def mirror_pad(image, pad_size):
 
 
 class Data(Dataset):
-    def __init__(self):
+    def __init__(self, train=True):
         # transform = transforms.Compose(
         #     [transforms.Resize((388, 388)), transforms.ToTensor()]
         # )
         rotate = transforms.RandomRotation(90)
         self.x = []
         self.y = []
-
+        self.train = train
         pad_size = 94
+        if train:
+            # 遍历指定文件夹中的所有文件
+            for filename in os.listdir("unet/Data/membrane/train/image"):
+                file_path = os.path.join("unet/Data/membrane/train/image", filename)
+                # 判断是否是文件以及是否是图片格式
+                if os.path.isfile(file_path) and filename.lower().endswith((".png")):
+                    image = Image.open(file_path)
+                    # image = transform(image)
 
-        # 遍历指定文件夹中的所有文件
-        for filename in os.listdir("unet/Data/membrane/train/image"):
-            file_path = os.path.join("unet/Data/membrane/train/image", filename)
-            # 判断是否是文件以及是否是图片格式
-            if os.path.isfile(file_path) and filename.lower().endswith((".png")):
-                image = Image.open(file_path)
-                # image = transform(image)
+                    # Apply mirror padding
+                    # image = mirror_pad(image, pad_size)
+                    image = transforms.ToTensor()(image)
+                    # image2 = rotate(image)
+                    self.x.append(image)
+                    # self.x.append(image2)
 
-                # Apply mirror padding
-                # image = mirror_pad(image, pad_size)
-                image = transforms.ToTensor()(image)
-                image2 = rotate(image)
-                self.x.append(image)
-                self.x.append(image2)
-
-        for filename in os.listdir("unet/Data/membrane/train/label"):
-            file_path = os.path.join("unet/Data/membrane/train/label", filename)
-            # 判断是否是文件以及是否是图片格式
-            if os.path.isfile(file_path) and filename.lower().endswith((".png")):
-                image = Image.open(file_path)
-                # image = transform(image)
-                image = transforms.ToTensor()(image)
-                image2 = rotate(image)
-                self.y.append(image)
-                self.y.append(image2)
+            for filename in os.listdir("unet/Data/membrane/train/label"):
+                file_path = os.path.join("unet/Data/membrane/train/label", filename)
+                # 判断是否是文件以及是否是图片格式
+                if os.path.isfile(file_path) and filename.lower().endswith((".png")):
+                    image = Image.open(file_path)
+                    # image = transform(image)
+                    image = transforms.ToTensor()(image)
+                    # image2 = rotate(image)
+                    self.y.append(image)
+                    # self.y.append(image2)
+        else:
+            for filename in os.listdir("unet/Data/membrane/test"):
+                file_path = os.path.join("unet/Data/membrane/test", filename)
+                # 判断是否是文件以及是否是图片格式
+                if os.path.isfile(file_path) and not filename.lower().endswith(
+                    ("predict.png")
+                ):
+                    image = Image.open(file_path)
+                    image = transforms.ToTensor()(image)
+                    self.x.append(image)
+                    self.y.append(filename)
+        print(self.y)
 
     def __getitem__(self, index):
         return self.x[index], self.y[index]
@@ -73,7 +85,7 @@ class UnetBlock(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_heads) -> None:
+    def __init__(self, input_dim, hidden_dim, num_heads, drop=0.2) -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(input_dim)
         self.q = nn.Linear(input_dim, input_dim)
@@ -84,6 +96,7 @@ class TransformerBlock(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
+            nn.Dropout(drop),  # 添加 Dropout 层
             nn.Linear(hidden_dim, input_dim),
         )
 
@@ -115,6 +128,12 @@ class PatchEmbedding(nn.Module):
         )
         # self.norm = nn.LayerNorm(embed_dim)
 
+        # 位置编码
+        self.position_embedding = nn.Parameter(
+            torch.zeros(1, self.num_patches, self.embed_dim)
+        )
+        nn.init.trunc_normal_(self.position_embedding, std=0.02)  # 随机初始化
+
     def forward(self, x):
         x = self.proj(x)
         # 输入为 B,C,H,W
@@ -122,6 +141,7 @@ class PatchEmbedding(nn.Module):
         # 然后flatten变成 B,embed_dim,H/patch_size*W/patch_size
         # 然后transpose变成 B,H/patch_size*W/size,embed_dim得到想要的结果
         x = x.flatten(2).transpose(1, 2)
+        x = x + self.position_embedding.expand(x.shape[0], -1, -1)
         # x = self.norm(x)
         return x
 
@@ -133,7 +153,7 @@ class TransUnet(nn.Module):
         # self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
 
         self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.softmax = nn.Softmax(dim=1)
+        self.softmax = nn.Softmax()
         self.embed_dim = embed_dim
 
         self.down1 = UnetBlock(in_channels, ch[0])
@@ -142,7 +162,7 @@ class TransUnet(nn.Module):
         self.down4 = UnetBlock(ch[2], ch[3])
         self.patchEmbedding = PatchEmbedding(64, 2, 256, embed_dim)
         self.Transform = nn.Sequential(
-            *[TransformerBlock(embed_dim, embed_dim * 3, 8) for _ in range(3)]
+            *[TransformerBlock(embed_dim, embed_dim * 3, 8) for _ in range(12)]
         )
         self.conv1 = nn.Conv2d(embed_dim, 512, kernel_size=3, stride=1, padding=1)
 
@@ -189,7 +209,7 @@ class TransUnet(nn.Module):
 
 def train(net, data_loader, loss_fn, optimizer, num_epochs, device):
     print("Start Training...")
-    loss_fn = nn.BCEWithLogitsLoss()
+    # loss_fn = nn.BCEWithLogitsLoss()
     for epoch in range(num_epochs):
         net.train()  # 设置网络为训练模式
         total_loss = 0.0
@@ -217,11 +237,32 @@ if __name__ == "__main__":
         if torch.backends.mps.is_available()
         else "cpu"
     )
-    model = TransUnet(1, 1).to(device)
-    print(model)
-    data = Data()
-    dataloader = DataLoader(data, batch_size=2, shuffle=True)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    loss_fn = nn.CrossEntropyLoss()
-    train(model, dataloader, loss_fn, optimizer, 100, device)
-    model._save_to_state_dict("1.pth")
+
+    Net = TransUnet(1, 1).to(device)
+
+    i = 0
+    if os.path.exists("TransNet+.pth"):
+        Net.load_state_dict(torch.load("TransNet+.pth"))
+        Net.eval()
+        data = Data(False)
+        dataloader = DataLoader(data, batch_size=1, shuffle=False)
+        for batch_idx, (inputs, name) in enumerate(dataloader):
+            inputs = inputs.to(device)
+            result = Net(inputs)
+            # 将张量转换为图像
+            out_np = result.squeeze().cpu().detach().numpy()
+            # 将 NumPy 数组转换为 PIL 图像
+            image = Image.fromarray(np.uint8(out_np))
+            # 保存图像为文件
+            print(name[0])
+            output_image_path = name[0]
+            i += 1
+            inverted_image = ImageOps.invert(image)
+            inverted_image.save(output_image_path)
+    else:
+        data = Data()
+        dataloader = DataLoader(data, batch_size=5, shuffle=True)
+        optimizer = torch.optim.Adam(Net.parameters(), lr=0.002)
+        loss_fn = nn.BCEWithLogitsLoss()
+        train(Net, dataloader, loss_fn, optimizer, 200, device)
+        torch.save(Net.state_dict(), "TransNet+.pth")

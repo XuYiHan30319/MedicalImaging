@@ -109,6 +109,7 @@ class UNetPP(nn.Module):
         self.final2 = nn.Conv2d(ch[0], outChannel, 1)
         self.final3 = nn.Conv2d(ch[0], outChannel, 1)
         self.final4 = nn.Conv2d(ch[0], outChannel, 1)
+        
     def forward(self, x):
         x0_0 = self.x0_0(x)
         x = self.pool(x0_0)
