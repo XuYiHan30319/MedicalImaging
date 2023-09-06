@@ -71,8 +71,6 @@ class Data(Dataset):
 
 class UnetBlock(nn.Module):
     def __init__(self, inChannel, outChannel) -> None:
-        # 使用卷积核大小3，步长1，填充1，保持大小不变，从而让神经网络绝对对称,可以吧下降和上升写在一起
-        # 在transunet中只有一层哦
         super().__init__()
         self.net = nn.Sequential(
             nn.Conv2d(inChannel, outChannel, 3, padding=1, stride=1),
